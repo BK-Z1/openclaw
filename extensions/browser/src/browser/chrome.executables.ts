@@ -732,7 +732,7 @@ export function resolveGoogleChromeExecutableForPlatform(
 }
 
 export function readBrowserVersion(executablePath: string): string | null {
-  const output = execText(executablePath, ["--version"], 2000);
+  const output = execText(executablePath, ["--version"], 10_000);
   if (!output) {
     return null;
   }
