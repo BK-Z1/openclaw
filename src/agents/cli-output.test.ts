@@ -322,6 +322,38 @@ describe("parseCliJsonl", () => {
     });
   });
 
+  it("does not let cumulative Claude result usage overwrite assistant usage", () => {
+    const result = parseCliJsonl(
+      [
+        JSON.stringify({ type: "init", session_id: "session-stream" }),
+        JSON.stringify({
+          type: "assistant",
+          usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 100 },
+        }),
+        JSON.stringify({
+          type: "result",
+          session_id: "session-stream",
+          result: "done",
+          usage: { input_tokens: 30, output_tokens: 15, cache_read_input_tokens: 300 },
+        }),
+      ].join("\n"),
+      {
+        command: "claude",
+        output: "jsonl",
+        sessionIdFields: ["session_id"],
+      },
+      "claude-cli",
+    );
+
+    expect(result?.usage).toEqual({
+      input: 10,
+      output: 5,
+      cacheRead: 100,
+      cacheWrite: undefined,
+      total: undefined,
+    });
+  });
+
   it("preserves Claude session metadata even when the final result text is empty", () => {
     const result = parseCliJsonl(
       [

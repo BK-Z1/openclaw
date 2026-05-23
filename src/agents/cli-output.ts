@@ -39,6 +39,14 @@ function usesClaudeStreamJsonDialect(params: {
   );
 }
 
+function shouldReadCliJsonlUsage(params: {
+  backend: CliBackendConfig;
+  providerId: string;
+  parsed: Record<string, unknown>;
+}): boolean {
+  return !(usesClaudeStreamJsonDialect(params) && params.parsed.type === "result");
+}
+
 function extractJsonObjectCandidates(raw: string): string[] {
   return extractBalancedJsonFragments(raw, { openers: ["{"] }).map((fragment) => fragment.json);
 }
@@ -396,10 +404,17 @@ export function createCliJsonlStreamingParser(params: {
     if (!sessionId && typeof parsed.thread_id === "string") {
       sessionId = parsed.thread_id.trim();
     }
-    // Only read usage from non-result events. Claude-cli's result event
-    // reports cumulative cache_read across all tool sub-calls, while
-    // assistant events carry the per-call usage we need.
-    if (parsed.type !== "result") {
+    // Claude stream-json result events report cumulative cache_read across all
+    // tool sub-calls. Keep them only as a fallback when no assistant usage
+    // arrived, but do not let them overwrite per-call assistant usage.
+    if (
+      shouldReadCliJsonlUsage({
+        backend: params.backend,
+        providerId: params.providerId,
+        parsed,
+      }) ||
+      !usage
+    ) {
       usage = readCliUsage(parsed) ?? usage;
     }
 
@@ -510,7 +525,9 @@ export function parseCliJsonl(
       if (!sessionId && typeof parsed.thread_id === "string") {
         sessionId = parsed.thread_id.trim();
       }
-      usage = readCliUsage(parsed) ?? usage;
+      if (shouldReadCliJsonlUsage({ backend, providerId, parsed }) || !usage) {
+        usage = readCliUsage(parsed) ?? usage;
+      }
 
       const claudeResult = parseClaudeCliJsonlResult({
         backend,
