@@ -457,6 +457,11 @@ function buildDispatchTimelineAttributes(ctx: MsgContext | FinalizedMsgContext) 
 export type DispatchInboundResult = DispatchFromConfigResult;
 export { settleReplyDispatcher, withReplyDispatcher } from "./dispatch-dispatcher.js";
 
+/** Clears foreground reply fence state for tests that exercise concurrent dispatch. */
+export function clearForegroundReplyFenceForTest(): void {
+  foregroundReplyFenceByKey.clear();
+}
+
 function finalizeDispatchResult(
   result: DispatchFromConfigResult,
   dispatcher: ReplyDispatcher,

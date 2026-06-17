@@ -2,16 +2,18 @@
  *  cancelled just because a newer generation produced a visible delivery. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
+import {
+  clearForegroundReplyFenceForTest,
+  dispatchInboundMessageWithBufferedDispatcher,
+} from "./dispatch.js";
+import type { DispatchFromConfigParams } from "./reply/dispatch-from-config.types.js";
 import { buildTestCtx } from "./reply/test-ctx.js";
 
 type DispatchReplyFromConfigFn =
   typeof import("./reply/dispatch-from-config.js").dispatchReplyFromConfig;
 
 const hoisted = vi.hoisted(() => ({
-  dispatchReplyFromConfigMock: vi.fn<
-    Parameters<DispatchReplyFromConfigFn>,
-    ReturnType<DispatchReplyFromConfigFn>
-  >(),
+  dispatchReplyFromConfigMock: vi.fn<DispatchReplyFromConfigFn>(),
 }));
 
 vi.mock("./reply/dispatch-from-config.js", () => ({
@@ -26,8 +28,6 @@ vi.mock("../plugins/hook-runner-global.js", () => ({
     runReplyPayloadSending: vi.fn(async () => undefined),
   })),
 }));
-
-const { dispatchInboundMessageWithBufferedDispatcher } = await import("./dispatch.js");
 
 function createDeferred<T = void>(): {
   promise: Promise<T>;
@@ -57,6 +57,7 @@ function sharedCtx() {
 describe("foreground reply fence", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearForegroundReplyFenceForTest();
   });
 
   it("does not cancel an older in-flight generation when a newer generation delivers visibly", async () => {
@@ -75,18 +76,22 @@ describe("foreground reply fence", () => {
     });
 
     // Generation A begins first but waits to enqueue its reply until generation B has started.
-    hoisted.dispatchReplyFromConfigMock.mockImplementationOnce(async ({ dispatcher }) => {
-      await aStarted.promise;
-      dispatcher.sendFinalReply({ text: "reply A" });
-      await aCanFinish.promise;
-      return { queuedFinal: true, counts: { tool: 0, block: 0, final: 1 } };
-    });
+    hoisted.dispatchReplyFromConfigMock.mockImplementationOnce(
+      async ({ dispatcher }: DispatchFromConfigParams) => {
+        await aStarted.promise;
+        dispatcher.sendFinalReply({ text: "reply A" });
+        await aCanFinish.promise;
+        return { queuedFinal: true, counts: { tool: 0, block: 0, final: 1 } };
+      },
+    );
 
     // Generation B enqueues its reply immediately.
-    hoisted.dispatchReplyFromConfigMock.mockImplementationOnce(async ({ dispatcher }) => {
-      dispatcher.sendFinalReply({ text: "reply B" });
-      return { queuedFinal: true, counts: { tool: 0, block: 0, final: 1 } };
-    });
+    hoisted.dispatchReplyFromConfigMock.mockImplementationOnce(
+      async ({ dispatcher }: DispatchFromConfigParams) => {
+        dispatcher.sendFinalReply({ text: "reply B" });
+        return { queuedFinal: true, counts: { tool: 0, block: 0, final: 1 } };
+      },
+    );
 
     const aPromise = dispatchInboundMessageWithBufferedDispatcher({
       ctx: sharedCtx(),
