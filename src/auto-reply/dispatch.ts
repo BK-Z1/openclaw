@@ -167,7 +167,10 @@ async function shouldCancelForegroundReplyDelivery(
       return false;
     }
     if (state.visibleDeliveryGeneration > snapshot.generation) {
-      return true;
+      // Only cancel an older generation if it is no longer active/in-flight.
+      // If the generation is still producing deliveries, let it finish so a
+      // newer message's visible delivery does not truncate an ongoing reply.
+      return !state.activeGenerations.has(snapshot.generation);
     }
     if (!hasNewerActiveForegroundReplyFenceGeneration(state, snapshot.generation)) {
       return false;
